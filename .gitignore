@@ -2,7 +2,8 @@ node_modules/
 dist/
 dist-electron/
 release/
-release-build/
+release-build*/
+outputs/
 *.log
 *.tsbuildinfo
 .DS_Store

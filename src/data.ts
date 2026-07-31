@@ -45,6 +45,7 @@ export const initialSegments: Segment[] = [
     status: 'review',
     match: 78,
     note: '包含颜色标签，请检查标签位置。',
+    protectedElements: ['<color=#2aff1f>', '</color>'],
   },
   {
     id: 3,
@@ -52,6 +53,7 @@ export const initialSegments: Segment[] = [
     target: 'Chúc mừng nhận được %s Linh Thạch',
     status: 'translated',
     match: 100,
+    protectedElements: ['%s'],
   },
   {
     id: 4,
@@ -81,6 +83,7 @@ export const initialSegments: Segment[] = [
     target: 'Số lần khiêu chiến còn lại hôm nay: {0}',
     status: 'translated',
     match: 93,
+    protectedElements: ['{0}'],
   },
   {
     id: 8,
@@ -109,16 +112,16 @@ export const initialSegments: Segment[] = [
 export const itemSegments: Segment[] = [
   { id: 1, source: '玄铁长剑', target: 'Trường Kiếm Huyền Thiết', status: 'translated', match: 100 },
   { id: 2, source: '使用后永久提升角色攻击力。', target: 'Sau khi sử dụng, tăng vĩnh viễn sức tấn công của nhân vật.', status: 'translated', match: 91 },
-  { id: 3, source: '<color=#9df19b>稀有</color>装备', target: '<color=#9df19b>Trang bị hiếm</color>', status: 'review', match: 82, note: '请检查颜色标签包裹范围。' },
+  { id: 3, source: '<color=#9df19b>稀有</color>装备', target: '<color=#9df19b>Trang bị hiếm</color>', status: 'review', match: 82, note: '请检查颜色标签包裹范围。', protectedElements: ['<color=#9df19b>', '</color>'] },
   { id: 4, source: '白垩石', target: '', status: 'untranslated', match: 67, note: '道具名称，避免逐字拆分。' },
   { id: 5, source: '绑定后不可交易', target: 'Không thể giao dịch sau khi khóa', status: 'translated', match: 97 },
-  { id: 6, source: '剩余数量：{0}', target: 'Số lượng còn lại: {0}', status: 'translated', match: 100 },
+  { id: 6, source: '剩余数量：{0}', target: 'Số lượng còn lại: {0}', status: 'translated', match: 100, protectedElements: ['{0}'] },
 ]
 
 export const eventSegments: Segment[] = [
   { id: 1, source: '七日登录，豪礼不断！', target: 'Đăng nhập 7 ngày, nhận quà không ngừng!', status: 'translated', match: 94 },
   { id: 2, source: '活动时间：7月15日-7月22日', target: 'Thời gian sự kiện: 15/7 - 22/7', status: 'translated', match: 98 },
-  { id: 3, source: '累计充值达到%s元', target: 'Tổng nạp đạt %s NDT', status: 'review', match: 79, note: '币种需要根据发行地区调整。' },
+  { id: 3, source: '累计充值达到%s元', target: 'Tổng nạp đạt %s NDT', status: 'review', match: 79, note: '币种需要根据发行地区调整。', protectedElements: ['%s'] },
   { id: 4, source: '全服排名奖励', target: 'Phần thưởng xếp hạng toàn máy chủ', status: 'translated', match: 88 },
   { id: 5, source: '奖励将在活动结束后通过邮件发放。', target: 'Phần thưởng sẽ được gửi qua thư sau khi sự kiện kết thúc.', status: 'translated', match: 92 },
 ]

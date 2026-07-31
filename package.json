@@ -1,7 +1,7 @@
 {
   "name": "lingoforge-cat",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local-first CAT desktop application for game localization",
   "author": "Localization Team",
   "main": "dist-electron/main.js",

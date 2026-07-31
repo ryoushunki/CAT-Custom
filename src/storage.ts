@@ -5,6 +5,7 @@ interface StoredFileRecord {
   id: string
   file: ProjectFile
   segments: Segment[]
+  originalFile?: ArrayBuffer
 }
 
 interface CatDatabase extends DBSchema {
@@ -27,7 +28,13 @@ export async function loadFileRecords() {
   return database.getAll('files')
 }
 
-export async function saveFileRecord(file: ProjectFile, segments: Segment[]) {
+export async function saveFileRecord(file: ProjectFile, segments: Segment[], originalFile?: ArrayBuffer) {
   const database = await databasePromise
-  await database.put('files', { id: file.id, file, segments })
+  const existing = await database.get('files', file.id)
+  await database.put('files', {
+    id: file.id,
+    file,
+    segments,
+    originalFile: originalFile ?? existing?.originalFile,
+  })
 }

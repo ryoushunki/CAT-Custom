@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { readSheet } from 'read-excel-file/browser'
+import readXlsxFile from 'read-excel-file/browser'
 import {
   AlertCircle,
   BookOpen,
@@ -22,22 +22,39 @@ import {
   Upload,
 } from 'lucide-react'
 import { initialSegmentsByFile, projectFiles } from './data'
+import { seedTerms, seedTranslationMemory, similarityScore } from './languageAssets'
 import { loadFileRecords, saveFileRecord } from './storage'
-import type { ProjectFile, Segment, SegmentStatus } from './types'
+import type { ImportSettings, ProjectFile, Segment, SegmentStatus, TranslationMemoryEntry } from './types'
 
 type FilterType = 'all' | SegmentStatus
 type InspectorTab = 'suggestions' | 'ai' | 'terms'
+
+interface ParsedSheet {
+  sheet: string
+  data: unknown[][]
+}
+
+interface ImportDraft {
+  file: File
+  originalFile: ArrayBuffer
+  sheets: ParsedSheet[]
+  sheetName: string
+  sourceColumn: number
+  targetColumn: number | null
+  startRow: number
+  sourceLanguage: string
+  targetLanguage: string
+  nonTranslatablePattern: string
+}
+
+const DEFAULT_NON_TRANSLATABLE_PATTERN = '<[^>]+>|%(?:s|d)|\\\\n|\\{[^{}]+\\}'
+
+const languageOptions = ['简体中文', '英语', '越南语', '泰语', '韩语', '日语']
 
 const statusLabel: Record<SegmentStatus, string> = {
   untranslated: '未翻译',
   translated: '已翻译',
   review: '待检查',
-}
-
-const nextStatus: Record<SegmentStatus, SegmentStatus> = {
-  untranslated: 'translated',
-  translated: 'review',
-  review: 'untranslated',
 }
 
 function cloneInitialSegments() {
@@ -89,26 +106,228 @@ function parseCsv(text: string, delimiter: ',' | '\t') {
   return rows
 }
 
-function rowsToSegments(rows: unknown[][]) {
-  const normalizedRows = rows.map((row) => row.map((cell) => (cell == null ? '' : String(cell))))
-  const firstRow = normalizedRows[0]?.map((value) => value.trim().toLowerCase()) ?? []
+function normalizeRows(rows: unknown[][]) {
+  return rows.map((row) => row.map((cell) => (cell == null ? '' : String(cell))))
+}
+
+function looksLikeHeader(rows: unknown[][], sourceColumn = 0, targetColumn: number | null = 1) {
+  const firstRow = normalizeRows(rows)[0]?.map((value) => value.trim().toLowerCase()) ?? []
   const sourceHeaders = ['zh', 'source', 'source text', '原文', '中文', '简体中文']
   const targetHeaders = ['target', 'translation', '译文', '翻译', '越南语', 'vi', 'en', 'th', 'ko']
-  const hasHeader = sourceHeaders.includes(firstRow[0]) || targetHeaders.includes(firstRow[1])
-  const dataRows = hasHeader ? normalizedRows.slice(1) : normalizedRows
+  return sourceHeaders.includes(firstRow[sourceColumn]) || (targetColumn != null && targetHeaders.includes(firstRow[targetColumn]))
+}
 
-  return dataRows
-    .filter((row) => row[0]?.trim())
-    .map((row, index): Segment => {
-      const source = row[0].trim()
-      const target = row[1]?.trim() ?? ''
+function compilePattern(pattern: string) {
+  if (!pattern.trim()) return null
+  return new RegExp(pattern, 'g')
+}
+
+function extractProtectedElements(source: string, pattern: string) {
+  try {
+    const expression = compilePattern(pattern)
+    return expression ? Array.from(source.matchAll(expression), (match) => match[0]) : []
+  } catch {
+    return []
+  }
+}
+
+function getMissingProtectedElements(segment: Segment) {
+  const available = segment.target
+  const usedOffsets: number[] = []
+  return (segment.protectedElements ?? []).filter((element) => {
+    let offset = available.indexOf(element)
+    while (offset >= 0 && usedOffsets.includes(offset)) offset = available.indexOf(element, offset + element.length)
+    if (offset < 0) return true
+    usedOffsets.push(offset)
+    return false
+  })
+}
+
+function rowsToSegments(rows: unknown[][], settings: ImportSettings) {
+  const normalizedRows = normalizeRows(rows)
+  return normalizedRows
+    .map((row, rowIndex) => ({ row, rowIndex }))
+    .filter(({ rowIndex }) => rowIndex >= settings.startRow - 1)
+    .filter(({ row }) => row[settings.sourceColumn]?.trim())
+    .map(({ row, rowIndex }, index): Segment => {
+      const source = row[settings.sourceColumn].trim()
+      const target = settings.targetColumn == null ? '' : row[settings.targetColumn]?.trim() ?? ''
       return {
         id: index + 1,
         source,
         target,
-        status: target ? 'translated' : 'untranslated',
+        status: target ? 'review' : 'untranslated',
+        sourceRow: rowIndex + 1,
+        protectedElements: extractProtectedElements(source, settings.nonTranslatablePattern),
       }
     })
+}
+
+function columnName(index: number) {
+  let value = index + 1
+  let name = ''
+  while (value > 0) {
+    const remainder = (value - 1) % 26
+    name = String.fromCharCode(65 + remainder) + name
+    value = Math.floor((value - 1) / 26)
+  }
+  return name
+}
+
+function ImportDialog({
+  draft,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  draft: ImportDraft
+  onChange: (next: ImportDraft) => void
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const selectedSheet = draft.sheets.find((sheet) => sheet.sheet === draft.sheetName) ?? draft.sheets[0]
+  const maxColumns = Math.max(1, ...selectedSheet.data.slice(0, 30).map((row) => row.length))
+  const columns = Array.from({ length: maxColumns }, (_, index) => index)
+  const previewRows = normalizeRows(selectedSheet.data).slice(0, 8)
+  const settings: ImportSettings = {
+    sheetName: draft.sheetName,
+    sourceColumn: draft.sourceColumn,
+    targetColumn: draft.targetColumn,
+    startRow: draft.startRow,
+    sourceLanguage: draft.sourceLanguage,
+    targetLanguage: draft.targetLanguage,
+    nonTranslatablePattern: draft.nonTranslatablePattern,
+  }
+
+  let regexError = ''
+  try {
+    compilePattern(draft.nonTranslatablePattern)
+  } catch {
+    regexError = '正则表达式无效，请检查括号和转义符。'
+  }
+
+  const previewSegments = regexError ? [] : rowsToSegments(selectedSheet.data, settings)
+  const protectedCount = previewSegments.reduce((total, segment) => total + (segment.protectedElements?.length ?? 0), 0)
+  const update = (changes: Partial<ImportDraft>) => onChange({ ...draft, ...changes })
+
+  return (
+    <div className="modal-backdrop">
+      <section className="import-dialog" role="dialog" aria-modal="true" aria-label="导入文件设置">
+        <header className="import-dialog-header">
+          <div>
+            <span className="eyebrow">导入翻译文件</span>
+            <h2>{draft.file.name}</h2>
+          </div>
+          <button className="dialog-close" onClick={onCancel} aria-label="关闭导入设置">×</button>
+        </header>
+
+        <div className="import-dialog-body">
+          <div className="import-settings-grid">
+            <label>
+              <span>工作表</span>
+              <select
+                value={draft.sheetName}
+                onChange={(event) => {
+                  const nextSheet = draft.sheets.find((sheet) => sheet.sheet === event.target.value) ?? draft.sheets[0]
+                  update({
+                    sheetName: event.target.value,
+                    startRow: looksLikeHeader(nextSheet.data, draft.sourceColumn, draft.targetColumn) ? 2 : 1,
+                  })
+                }}
+              >
+                {draft.sheets.map((sheet) => <option key={sheet.sheet} value={sheet.sheet}>{sheet.sheet}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>原文列</span>
+              <select value={draft.sourceColumn} onChange={(event) => update({ sourceColumn: Number(event.target.value) })}>
+                {columns.map((column) => <option key={column} value={column}>{columnName(column)} 列</option>)}
+              </select>
+            </label>
+            <label>
+              <span>译文列</span>
+              <select value={draft.targetColumn ?? ''} onChange={(event) => update({ targetColumn: event.target.value === '' ? null : Number(event.target.value) })}>
+                <option value="">没有译文列</option>
+                {columns.map((column) => <option key={column} value={column}>{columnName(column)} 列</option>)}
+              </select>
+            </label>
+            <label>
+              <span>从第几行开始</span>
+              <input
+                type="number"
+                min={1}
+                max={Math.max(1, selectedSheet.data.length)}
+                value={draft.startRow}
+                onChange={(event) => update({ startRow: Math.max(1, Number(event.target.value) || 1) })}
+              />
+            </label>
+            <label>
+              <span>原文语言</span>
+              <select value={draft.sourceLanguage} onChange={(event) => update({ sourceLanguage: event.target.value })}>
+                {languageOptions.map((language) => <option key={language}>{language}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>目标语言</span>
+              <select value={draft.targetLanguage} onChange={(event) => update({ targetLanguage: event.target.value })}>
+                {languageOptions.map((language) => <option key={language}>{language}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <label className="regex-field">
+            <span>非译元素正则表达式</span>
+            <textarea
+              value={draft.nonTranslatablePattern}
+              onChange={(event) => update({ nonTranslatablePattern: event.target.value })}
+              placeholder="例如：<[^>]+>|%s|\\n"
+              spellCheck={false}
+            />
+            {regexError ? <em className="field-error">{regexError}</em> : <small>导入时会记录命中的标签、变量和占位符，供后续标签保护与QA使用。</small>}
+          </label>
+
+          <div className="import-preview-heading">
+            <strong>数据预览</strong>
+            <span>将导入 {previewSegments.length} 个句段 · 命中 {protectedCount} 个非译元素</span>
+          </div>
+          <div className="import-preview-scroll">
+            <table className="import-preview-table">
+              <thead>
+                <tr><th>#</th>{columns.map((column) => <th key={column}>{columnName(column)}</th>)}</tr>
+              </thead>
+              <tbody>
+                {previewRows.map((row, rowIndex) => (
+                  <tr key={rowIndex} className={rowIndex + 1 < draft.startRow ? 'skipped-row' : ''}>
+                    <th>{rowIndex + 1}</th>
+                    {columns.map((column) => (
+                      <td
+                        key={column}
+                        className={column === draft.sourceColumn ? 'source-column' : column === draft.targetColumn ? 'target-column' : ''}
+                      >
+                        {row[column] ?? ''}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <footer className="import-dialog-footer">
+          <div><i className="source-key" />原文列 <i className="target-key" />译文列</div>
+          <button className="secondary-button" onClick={onCancel}>取消</button>
+          <button
+            className="primary-button"
+            onClick={onConfirm}
+            disabled={Boolean(regexError) || !previewSegments.length || draft.sourceColumn === draft.targetColumn}
+          >
+            确认导入
+          </button>
+        </footer>
+      </section>
+    </div>
+  )
 }
 
 function App() {
@@ -123,6 +342,7 @@ function App() {
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [notice, setNotice] = useState<string | null>(null)
   const [isImporting, setImporting] = useState(false)
+  const [importDraft, setImportDraft] = useState<ImportDraft | null>(null)
   const saveTimer = useRef<number | null>(null)
   const noticeTimer = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -140,10 +360,20 @@ function App() {
   useEffect(() => {
     void loadFileRecords().then(async (records) => {
       if (records.length) {
-        setFiles(records.map((record) => record.file))
-        setSegmentsByFile(Object.fromEntries(records.map((record) => [record.id, record.segments])))
-        setActiveFileId(records[0].id)
-        setActiveSegmentId(records[0].segments[0]?.id ?? 1)
+        const migratedRecords = records.map((record) => {
+          const pattern = record.file.importSettings?.nonTranslatablePattern ?? DEFAULT_NON_TRANSLATABLE_PATTERN
+          const migratedSegments = record.segments.map((segment) => (
+            segment.protectedElements == null
+              ? { ...segment, protectedElements: extractProtectedElements(segment.source, pattern) }
+              : segment
+          ))
+          return { ...record, segments: migratedSegments }
+        })
+        setFiles(migratedRecords.map((record) => record.file))
+        setSegmentsByFile(Object.fromEntries(migratedRecords.map((record) => [record.id, record.segments])))
+        setActiveFileId(migratedRecords[0].id)
+        setActiveSegmentId(migratedRecords[0].segments[0]?.id ?? 1)
+        await Promise.all(migratedRecords.map((record) => saveFileRecord(record.file, record.segments, record.originalFile)))
         return
       }
 
@@ -194,6 +424,44 @@ function App() {
 
   const activeSegment = segments.find((segment) => segment.id === activeSegmentId) ?? segments[0]
 
+  const translationMemory = useMemo<TranslationMemoryEntry[]>(() => {
+    const liveEntries = Object.entries(segmentsByFile).flatMap(([fileId, fileSegments]) => {
+      const file = files.find((candidate) => candidate.id === fileId)
+      return fileSegments
+        .filter((segment) => segment.target.trim() && segment.status === 'translated')
+        .map((segment) => ({
+          id: `live-${fileId}-${segment.id}`,
+          source: segment.source,
+          target: segment.target,
+          project: file?.name ?? '当前项目',
+          fileId,
+          segmentId: segment.id,
+        }))
+    })
+    return [...liveEntries, ...seedTranslationMemory]
+  }, [files, segmentsByFile])
+
+  const memoryMatches = useMemo(() => {
+    if (!activeSegment) return []
+    const deduplicated = new Map<string, TranslationMemoryEntry & { score: number }>()
+    for (const entry of translationMemory) {
+      if (entry.fileId === activeFileId && entry.segmentId === activeSegment.id) continue
+      const score = similarityScore(activeSegment.source, entry.source)
+      if (score < 45) continue
+      const key = `${entry.source}\u0000${entry.target}`
+      const existing = deduplicated.get(key)
+      if (!existing || score > existing.score) deduplicated.set(key, { ...entry, score })
+    }
+    return [...deduplicated.values()].sort((left, right) => right.score - left.score).slice(0, 3)
+  }, [activeFileId, activeSegment, translationMemory])
+
+  const termMatches = useMemo(() => {
+    if (!activeSegment) return []
+    return seedTerms.filter((term) => activeSegment.source.includes(term.source))
+  }, [activeSegment])
+
+  const activeMissingElements = activeSegment ? getMissingProtectedElements(activeSegment) : []
+
   const persistSegments = (file: ProjectFile, nextSegments: Segment[]) => {
     setSaveState('saving')
     if (saveTimer.current) window.clearTimeout(saveTimer.current)
@@ -212,7 +480,11 @@ function App() {
   const updateTarget = (id: number, target: string) => {
     const nextSegments = segments.map((segment) =>
       segment.id === id
-        ? { ...segment, target, status: target.trim() ? 'translated' : 'untranslated' as SegmentStatus }
+        ? {
+            ...segment,
+            target,
+            status: target.trim() ? 'review' : 'untranslated' as SegmentStatus,
+          }
         : segment,
     )
     replaceSegments(nextSegments)
@@ -226,6 +498,21 @@ function App() {
     if (!activeSegment) return
     updateTarget(activeSegment.id, translation)
     showNotice('翻译建议已填入当前句段。')
+  }
+
+  const confirmActiveSegment = () => {
+    if (!activeSegment?.target.trim()) {
+      showNotice('请先填写译文，再确认句段。')
+      return
+    }
+    const missingElements = getMissingProtectedElements(activeSegment)
+    if (missingElements.length) {
+      setSegmentStatus(activeSegment.id, 'review')
+      showNotice(`缺少非译元素：${missingElements.join('、')}`)
+      return
+    }
+    setSegmentStatus(activeSegment.id, 'translated')
+    showNotice('句段已确认。')
   }
 
   const selectFile = (fileId: string) => {
@@ -243,45 +530,81 @@ function App() {
     setImporting(true)
     try {
       const lowerName = selectedFile.name.toLowerCase()
-      let rows: unknown[][]
+      let sheets: ParsedSheet[]
 
       if (lowerName.endsWith('.xlsx')) {
-        rows = await readSheet(selectedFile)
+        sheets = (await readXlsxFile(selectedFile)).map((sheet) => ({ sheet: sheet.sheet, data: sheet.data }))
       } else if (lowerName.endsWith('.csv') || lowerName.endsWith('.tsv')) {
         const text = await selectedFile.text()
-        rows = parseCsv(text, lowerName.endsWith('.tsv') ? '\t' : ',')
+        sheets = [{
+          sheet: lowerName.endsWith('.tsv') ? 'TSV' : 'CSV',
+          data: parseCsv(text, lowerName.endsWith('.tsv') ? '\t' : ','),
+        }]
       } else {
         throw new Error('unsupported')
       }
 
-      const importedSegments = rowsToSegments(rows)
-      if (!importedSegments.length) throw new Error('empty')
-
-      const importedFile: ProjectFile = {
-        id: `imported-${Date.now()}`,
-        name: selectedFile.name,
+      if (!sheets.length || !sheets[0].data.length) throw new Error('empty')
+      const firstSheet = sheets[0]
+      setImportDraft({
+        file: selectedFile,
+        originalFile: await selectedFile.arrayBuffer(),
+        sheets,
+        sheetName: firstSheet.sheet,
+        sourceColumn: 0,
+        targetColumn: 1,
+        startRow: looksLikeHeader(firstSheet.data) ? 2 : 1,
         sourceLanguage: activeFile?.sourceLanguage ?? '简体中文',
         targetLanguage: activeFile?.targetLanguage ?? '越南语',
-        progress: getProgress(importedSegments),
-        segmentCount: importedSegments.length,
-        updatedAt: '刚刚',
-      }
-
-      setFiles((current) => [importedFile, ...current])
-      setSegmentsByFile((current) => ({ ...current, [importedFile.id]: importedSegments }))
-      setActiveFileId(importedFile.id)
-      setActiveSegmentId(importedSegments[0].id)
-      setFilter('all')
-      setQuery('')
-      await saveFileRecord(importedFile, importedSegments)
-      showNotice(`已导入 ${importedSegments.length} 个句段。`)
+        nonTranslatablePattern: DEFAULT_NON_TRANSLATABLE_PATTERN,
+      })
     } catch (error) {
       showNotice(error instanceof Error && error.message === 'unsupported'
         ? '当前支持 XLSX、CSV 和 TSV 文件。'
-        : '未读取到有效原文，请确认原文在 A 列、译文在 B 列。')
+        : '没有读取到有效工作表，请检查文件内容。')
     } finally {
       setImporting(false)
     }
+  }
+
+  const confirmFileImport = async () => {
+    if (!importDraft) return
+    const selectedSheet = importDraft.sheets.find((sheet) => sheet.sheet === importDraft.sheetName) ?? importDraft.sheets[0]
+    const settings: ImportSettings = {
+      sheetName: importDraft.sheetName,
+      sourceColumn: importDraft.sourceColumn,
+      targetColumn: importDraft.targetColumn,
+      startRow: importDraft.startRow,
+      sourceLanguage: importDraft.sourceLanguage,
+      targetLanguage: importDraft.targetLanguage,
+      nonTranslatablePattern: importDraft.nonTranslatablePattern,
+    }
+    const importedSegments = rowsToSegments(selectedSheet.data, settings)
+    if (!importedSegments.length) {
+      showNotice('当前设置没有读取到原文，请检查原文列和起始行。')
+      return
+    }
+
+    const importedFile: ProjectFile = {
+      id: `imported-${Date.now()}`,
+      name: importDraft.file.name,
+      sourceLanguage: settings.sourceLanguage,
+      targetLanguage: settings.targetLanguage,
+      progress: getProgress(importedSegments),
+      segmentCount: importedSegments.length,
+      updatedAt: '刚刚',
+      importSettings: settings,
+    }
+
+    setFiles((current) => [importedFile, ...current])
+    setSegmentsByFile((current) => ({ ...current, [importedFile.id]: importedSegments }))
+    setActiveFileId(importedFile.id)
+    setActiveSegmentId(importedSegments[0].id)
+    setFilter('all')
+    setQuery('')
+    await saveFileRecord(importedFile, importedSegments, importDraft.originalFile)
+    setImportDraft(null)
+    showNotice(`已导入 ${importedSegments.length} 个句段。`)
   }
 
   useEffect(() => {
@@ -299,7 +622,7 @@ function App() {
       }
       if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && activeSegment) {
         event.preventDefault()
-        setSegmentStatus(activeSegment.id, 'translated')
+        confirmActiveSegment()
       }
     }
 
@@ -318,6 +641,14 @@ function App() {
         accept=".xlsx,.csv,.tsv"
         onChange={handleFileImport}
       />
+      {importDraft && (
+        <ImportDialog
+          draft={importDraft}
+          onChange={setImportDraft}
+          onCancel={() => setImportDraft(null)}
+          onConfirm={() => void confirmFileImport()}
+        />
+      )}
 
       <aside className="app-rail">
         <div className="brand-mark" aria-label="LingoForge">
@@ -446,7 +777,9 @@ function App() {
               <div className="head-status">状态</div>
             </div>
             <div className="segment-scroll">
-              {filteredSegments.map((segment) => (
+              {filteredSegments.map((segment) => {
+                const missingElements = getMissingProtectedElements(segment)
+                return (
                 <div
                   className={`segment-row ${segment.id === activeSegmentId ? 'active' : ''}`}
                   key={segment.id}
@@ -459,6 +792,9 @@ function App() {
                   <div className="source-cell">
                     <p>{segment.source}</p>
                     {segment.note && <span className="inline-note"><AlertCircle size={13} /> {segment.note}</span>}
+                    {missingElements.length > 0 && (
+                      <span className="inline-note qa-error"><AlertCircle size={13} /> 缺少非译元素：{missingElements.join('、')}</span>
+                    )}
                   </div>
                   <div className="target-cell">
                     <textarea
@@ -475,7 +811,16 @@ function App() {
                       title="点击切换状态"
                       onClick={(event) => {
                         event.stopPropagation()
-                        setSegmentStatus(segment.id, nextStatus[segment.status])
+                        if (!segment.target.trim()) {
+                          showNotice('空译文不能标记为已翻译。')
+                          return
+                        }
+                        if (segment.status !== 'translated' && missingElements.length) {
+                          showNotice(`缺少非译元素：${missingElements.join('、')}`)
+                          setSegmentStatus(segment.id, 'review')
+                          return
+                        }
+                        setSegmentStatus(segment.id, segment.status === 'translated' ? 'review' : 'translated')
                       }}
                     >
                       {statusLabel[segment.status]}
@@ -483,7 +828,8 @@ function App() {
                     {segment.match && <span className="match-score">{segment.match}%</span>}
                   </div>
                 </div>
-              ))}
+                )
+              })}
               {filteredSegments.length === 0 && (
                 <div className="empty-state"><Search size={28} /><strong>没有找到匹配句段</strong><span>请更换搜索词或筛选条件</span></div>
               )}
@@ -508,6 +854,14 @@ function App() {
                 <div className="context-card">
                   <div className="card-title"><span>当前句段</span><strong>#{activeSegment.id}</strong></div>
                   <p>{activeSegment.source}</p>
+                  {activeSegment.protectedElements?.length ? (
+                    <div className="protected-elements">
+                      {activeSegment.protectedElements.map((element, index) => <code key={`${element}-${index}`}>{element}</code>)}
+                    </div>
+                  ) : null}
+                  {activeMissingElements.length ? (
+                    <div className="warning-box qa-warning"><AlertCircle size={15} />译文缺少：{activeMissingElements.join('、')}</div>
+                  ) : null}
                   {activeSegment.note && <div className="warning-box"><AlertCircle size={15} />{activeSegment.note}</div>}
                 </div>
 
@@ -515,22 +869,26 @@ function App() {
                   <>
                     <div className="suggestion-section">
                       <div className="section-title"><span>翻译记忆库</span><em>点击即可采用</em></div>
-                      <button className="suggestion-card" onClick={() => applySuggestion('Chào mừng thiếu hiệp trở lại.')}>
-                        <div><span className="score high">92%</span><small>无名 · 主线剧情</small></div>
-                        <p>Chào mừng thiếu hiệp trở lại.</p>
-                        <span className="suggestion-source">欢迎少侠归来。</span>
-                      </button>
-                      <button className="suggestion-card" onClick={() => applySuggestion('Một hành trình mới sắp bắt đầu.')}>
-                        <div><span className="score">76%</span><small>奇迹3 · 系统文本</small></div>
-                        <p>Một hành trình mới sắp bắt đầu.</p>
-                        <span className="suggestion-source">新的旅程即将开始。</span>
-                      </button>
+                      {memoryMatches.length ? memoryMatches.map((match) => (
+                        <button className="suggestion-card" key={match.id} onClick={() => applySuggestion(match.target)}>
+                          <div><span className={`score ${match.score >= 90 ? 'high' : ''}`}>{match.score}%</span><small>{match.project}</small></div>
+                          <p>{match.target}</p>
+                          <span className="suggestion-source">{match.source}</span>
+                        </button>
+                      )) : (
+                        <div className="asset-empty"><Cloud size={19} /><span>当前句段没有达到45%的记忆库匹配</span></div>
+                      )}
                     </div>
 
                     <div className="suggestion-section">
-                      <div className="section-title"><span>命中术语</span><em>示例数据</em></div>
-                      <div className="term-row"><strong>少侠</strong><span>thiếu hiệp</span><i>已批准</i></div>
-                      <div className="term-row"><strong>灵石</strong><span>Linh Thạch</span><i>已批准</i></div>
+                      <div className="section-title"><span>命中术语</span><em>{termMatches.length} 条</em></div>
+                      {termMatches.length ? termMatches.map((term) => (
+                        <div className="term-row" key={term.source}>
+                          <strong>{term.source}</strong><span>{term.target}</span><i>{term.status === 'approved' ? '已批准' : '草稿'}</i>
+                        </div>
+                      )) : (
+                        <div className="asset-empty compact"><BookOpen size={17} /><span>当前原文没有命中术语</span></div>
+                      )}
                     </div>
                   </>
                 )}
@@ -546,16 +904,19 @@ function App() {
 
                 {inspectorTab === 'terms' && (
                   <div className="suggestion-section">
-                    <div className="section-title"><span>当前句段术语</span><em>示例数据</em></div>
-                    <div className="term-row"><strong>少侠</strong><span>thiếu hiệp</span><i>已批准</i></div>
-                    <div className="term-row"><strong>灵石</strong><span>Linh Thạch</span><i>已批准</i></div>
-                    <div className="feature-hint">术语库导入、编辑和项目绑定将在资产模块中实现。</div>
+                    <div className="section-title"><span>当前句段术语</span><em>{termMatches.length} 条</em></div>
+                    {termMatches.length ? termMatches.map((term) => (
+                      <div className="term-row" key={term.source}>
+                        <strong>{term.source}</strong><span>{term.target}</span><i>{term.status === 'approved' ? '已批准' : '草稿'}</i>
+                      </div>
+                    )) : <div className="asset-empty"><BookOpen size={19} /><span>当前原文没有命中术语</span></div>}
+                    <div className="feature-hint">当前使用内置术语数据；下一步接入正式术语库导入和编辑。</div>
                   </div>
                 )}
               </div>
 
               <div className="inspector-footer">
-                <button className="accept-button" onClick={() => setSegmentStatus(activeSegment.id, 'translated')}>
+                <button className="accept-button" onClick={confirmActiveSegment}>
                   <Check size={16} /> 确认句段 <kbd>Ctrl ↵</kbd>
                 </button>
               </div>

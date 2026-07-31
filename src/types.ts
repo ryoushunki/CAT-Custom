@@ -7,6 +7,18 @@ export interface Segment {
   status: SegmentStatus
   match?: number
   note?: string
+  sourceRow?: number
+  protectedElements?: string[]
+}
+
+export interface ImportSettings {
+  sheetName: string
+  sourceColumn: number
+  targetColumn: number | null
+  startRow: number
+  sourceLanguage: string
+  targetLanguage: string
+  nonTranslatablePattern: string
 }
 
 export interface ProjectFile {
@@ -17,4 +29,20 @@ export interface ProjectFile {
   progress: number
   segmentCount: number
   updatedAt: string
+  importSettings?: ImportSettings
+}
+
+export interface TranslationMemoryEntry {
+  id: string
+  source: string
+  target: string
+  project: string
+  fileId?: string
+  segmentId?: number
+}
+
+export interface TermEntry {
+  source: string
+  target: string
+  status: 'approved' | 'draft'
 }

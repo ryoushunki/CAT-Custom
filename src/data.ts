@@ -1,0 +1,107 @@
+import type { ProjectFile, Segment } from './types'
+
+export const projectFiles: ProjectFile[] = [
+  {
+    id: 'main-story',
+    name: '主线剧情.xlsx',
+    sourceLanguage: '简体中文',
+    targetLanguage: '越南语',
+    progress: 68,
+    segmentCount: 286,
+    updatedAt: '刚刚',
+  },
+  {
+    id: 'items',
+    name: '道具与装备.xlsx',
+    sourceLanguage: '简体中文',
+    targetLanguage: '越南语',
+    progress: 42,
+    segmentCount: 164,
+    updatedAt: '12分钟前',
+  },
+  {
+    id: 'events',
+    name: '活动文案_7月.xlsx',
+    sourceLanguage: '简体中文',
+    targetLanguage: '越南语',
+    progress: 91,
+    segmentCount: 98,
+    updatedAt: '昨天',
+  },
+]
+
+export const initialSegments: Segment[] = [
+  {
+    id: 1,
+    source: '欢迎回来，少侠。新的旅程即将开始。',
+    target: 'Chào mừng thiếu hiệp trở lại. Một hành trình mới sắp bắt đầu.',
+    status: 'translated',
+    match: 96,
+  },
+  {
+    id: 2,
+    source: '<color=#2aff1f>战</color>天斗地，至死方休。',
+    target: '<color=#2aff1f>Chiến</color> đấu với trời đất, đến chết mới thôi.',
+    status: 'review',
+    match: 78,
+    note: '包含颜色标签，请检查标签位置。',
+  },
+  {
+    id: 3,
+    source: '恭喜获得%s枚灵石',
+    target: 'Chúc mừng nhận được %s Linh Thạch',
+    status: 'translated',
+    match: 100,
+  },
+  {
+    id: 4,
+    source: '湖畔携游',
+    target: '',
+    status: 'untranslated',
+    match: 71,
+  },
+  {
+    id: 5,
+    source: '服务器即将在10分钟后关闭，请及时下线。',
+    target: 'Máy chủ sẽ đóng sau 10 phút, vui lòng đăng xuất kịp thời.',
+    status: 'translated',
+    match: 88,
+  },
+  {
+    id: 6,
+    source: '晴夏伴行',
+    target: '',
+    status: 'untranslated',
+    match: 64,
+    note: '道具名称，保持名词结构，不要补充主语。',
+  },
+  {
+    id: 7,
+    source: '今日剩余挑战次数：{0}',
+    target: 'Số lần khiêu chiến còn lại hôm nay: {0}',
+    status: 'translated',
+    match: 93,
+  },
+  {
+    id: 8,
+    source: '点击任意位置继续',
+    target: 'Nhấn vào vị trí bất kỳ để tiếp tục',
+    status: 'translated',
+    match: 84,
+  },
+  {
+    id: 9,
+    source: '草色入帘',
+    target: '',
+    status: 'untranslated',
+    match: 58,
+    note: '诗意场景文案，需要本地化表达。',
+  },
+  {
+    id: 10,
+    source: '网络连接中断，请稍后重试。',
+    target: 'Kết nối mạng bị gián đoạn, vui lòng thử lại sau.',
+    status: 'translated',
+    match: 99,
+  },
+]

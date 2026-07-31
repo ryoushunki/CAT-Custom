@@ -1,6 +1,11 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('catApp', {
   platform: process.platform,
-  version: '0.1.0',
+  version: '0.4.0',
+  saveExportedFile: (payload: {
+    defaultName: string
+    data: Uint8Array
+    filters: { name: string; extensions: string[] }[]
+  }) => ipcRenderer.invoke('save-exported-file', payload),
 })

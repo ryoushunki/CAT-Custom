@@ -1,8 +1,23 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
+
+ipcMain.handle('save-exported-file', async (_event, payload: {
+  defaultName: string
+  data: Uint8Array
+  filters: { name: string; extensions: string[] }[]
+}) => {
+  const result = await dialog.showSaveDialog({
+    defaultPath: path.join(app.getPath('downloads'), payload.defaultName),
+    filters: payload.filters,
+  })
+  if (result.canceled || !result.filePath) return { canceled: true }
+  await writeFile(result.filePath, Buffer.from(payload.data))
+  return { canceled: false, filePath: result.filePath }
+})
 
 function createWindow() {
   const window = new BrowserWindow({

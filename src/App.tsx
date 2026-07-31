@@ -8,6 +8,7 @@ import {
   ChevronDown,
   CircleHelp,
   Cloud,
+  Download,
   FilePlus2,
   Files,
   Filter,
@@ -22,8 +23,9 @@ import {
   Upload,
 } from 'lucide-react'
 import { initialSegmentsByFile, projectFiles } from './data'
+import { buildTranslatedExport } from './fileExport'
 import { seedTerms, seedTranslationMemory, similarityScore } from './languageAssets'
-import { loadFileRecords, saveFileRecord } from './storage'
+import { loadFileRecord, loadFileRecords, saveFileRecord } from './storage'
 import type { ImportSettings, ProjectFile, Segment, SegmentStatus, TranslationMemoryEntry } from './types'
 
 type FilterType = 'all' | SegmentStatus
@@ -342,6 +344,7 @@ function App() {
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [notice, setNotice] = useState<string | null>(null)
   const [isImporting, setImporting] = useState(false)
+  const [isExporting, setExporting] = useState(false)
   const [importDraft, setImportDraft] = useState<ImportDraft | null>(null)
   const saveTimer = useRef<number | null>(null)
   const noticeTimer = useRef<number | null>(null)
@@ -607,6 +610,65 @@ function App() {
     showNotice(`已导入 ${importedSegments.length} 个句段。`)
   }
 
+  const exportActiveFile = async () => {
+    if (!activeFile?.importSettings) {
+      showNotice('示例文件没有原始文件，请先导入真实翻译文件。')
+      return
+    }
+
+    setExporting(true)
+    try {
+      await saveFileRecord(activeFile, segments)
+      const record = await loadFileRecord(activeFile.id)
+      if (!record?.originalFile) throw new Error('missing-original-file')
+
+      const exported = buildTranslatedExport(
+        record.originalFile,
+        activeFile.name,
+        activeFile.importSettings,
+        segments,
+      )
+      const basename = activeFile.name.replace(/\.[^.]+$/, '')
+      const defaultName = `${basename}_已翻译.${exported.extension}`
+      const filters = [{
+        name: exported.extension.toUpperCase(),
+        extensions: [exported.extension],
+      }]
+
+      if (window.catApp?.saveExportedFile) {
+        const result = await window.catApp.saveExportedFile({
+          defaultName,
+          data: exported.bytes,
+          filters,
+        })
+        if (result.canceled) {
+          showNotice('已取消导出。')
+          return
+        }
+      } else {
+        const blob = new Blob([exported.bytes as BlobPart], { type: exported.mimeType })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = defaultName
+        link.click()
+        URL.revokeObjectURL(url)
+      }
+
+      const qaWarnings = segments.filter((segment) => getMissingProtectedElements(segment).length > 0).length
+      const targetColumnLabel = `${columnName(exported.targetColumn)} 列`
+      showNotice(qaWarnings
+        ? `导出完成，译文已写入 ${targetColumnLabel}；另有 ${qaWarnings} 个句段存在非译元素警告。`
+        : `导出完成，译文已写入 ${targetColumnLabel}。`)
+    } catch (error) {
+      showNotice(error instanceof Error && error.message === 'missing-original-file'
+        ? '找不到导入时保存的原始文件，请重新导入。'
+        : '导出失败，原文件可能已损坏或格式暂不受支持。')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   useEffect(() => {
     const handleKeyboard = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -735,6 +797,14 @@ function App() {
               {saveState === 'saved' ? <Check size={14} /> : <span className="saving-dot" />}
               {saveState === 'saved' ? '已自动保存' : '正在保存'}
             </div>
+            <button
+              className="secondary-button"
+              onClick={() => void exportActiveFile()}
+              disabled={isExporting || !activeFile?.importSettings}
+              title={activeFile?.importSettings ? '按导入时的行列设置回写译文' : '示例文件没有可回写的原始文件'}
+            >
+              <Download size={16} /> {isExporting ? '正在导出…' : '导出文件'}
+            </button>
             <button className="secondary-button disabled-action" disabled title="配置AI接口后开放">
               <Sparkles size={16} /> AI预翻译
             </button>

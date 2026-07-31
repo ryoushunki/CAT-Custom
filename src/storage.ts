@@ -28,6 +28,11 @@ export async function loadFileRecords() {
   return database.getAll('files')
 }
 
+export async function loadFileRecord(id: string) {
+  const database = await databasePromise
+  return database.get('files', id)
+}
+
 export async function saveFileRecord(file: ProjectFile, segments: Segment[], originalFile?: ArrayBuffer) {
   const database = await databasePromise
   const existing = await database.get('files', file.id)

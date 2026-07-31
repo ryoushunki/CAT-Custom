@@ -1,7 +1,7 @@
 {
   "name": "lingoforge-cat",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local-first CAT desktop application for game localization",
   "author": "Localization Team",
   "main": "dist-electron/main.js",
@@ -9,11 +9,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "test:export": "node --experimental-strip-types tests/export-roundtrip.ts",
     "preview": "vite preview",
     "dist": "npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
+    "fflate": "^0.8.3",
     "idb": "^8.0.3",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",
@@ -21,12 +23,14 @@
     "read-excel-file": "^9.3.5"
   },
   "devDependencies": {
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
+    "jsdom": "^26.1.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.0",
     "vite-plugin-electron": "^1.1.0",

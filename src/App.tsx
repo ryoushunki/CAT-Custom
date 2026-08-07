@@ -667,7 +667,8 @@ function App() {
         id: `asset-${asset.id}-${index}`,
         project: entry.project || asset.name,
       })))
-    return [...importedEntries, ...liveEntries, ...seedTranslationMemory]
+    const hasImportedPair = assets.some((asset) => asset.kind === 'memory' && asset.sourceLanguage === activeFile?.sourceLanguage && asset.targetLanguage === activeFile?.targetLanguage)
+    return [...importedEntries, ...liveEntries, ...(hasImportedPair ? [] : seedTranslationMemory)]
   }, [activeFile?.sourceLanguage, activeFile?.targetLanguage, assets, files, segmentsByFile])
 
   const memoryMatches = useMemo(() => {
@@ -689,8 +690,9 @@ function App() {
     const importedTerms = assets
       .filter((asset) => asset.kind === 'terms' && asset.sourceLanguage === activeFile?.sourceLanguage && asset.targetLanguage === activeFile?.targetLanguage)
       .flatMap((asset) => asset.entries as TermEntry[])
+    const hasImportedPair = assets.some((asset) => asset.kind === 'terms' && asset.sourceLanguage === activeFile?.sourceLanguage && asset.targetLanguage === activeFile?.targetLanguage)
     const deduplicated = new Map<string, TermEntry>()
-    for (const term of [...importedTerms, ...seedTerms]) {
+    for (const term of [...importedTerms, ...(hasImportedPair ? [] : seedTerms)]) {
       if (!activeSegment.source.includes(term.source)) continue
       const key = `${term.source}\u0000${term.target}`
       if (!deduplicated.has(key)) deduplicated.set(key, term)
@@ -1347,7 +1349,7 @@ function App() {
                         <strong>{term.source}</strong><span>{term.target}</span><i>{term.status === 'approved' ? '已批准' : '草稿'}</i>
                       </div>
                     )) : <div className="asset-empty"><BookOpen size={19} /><span>当前原文没有命中术语</span></div>}
-                    <div className="feature-hint">{assets.filter((asset) => asset.kind === 'terms').length ? '当前已叠加本地导入术语库与内置示例术语。' : '当前使用内置示例术语；可从左侧术语库入口导入正式资产。'}</div>
+                    <div className="feature-hint">{assets.filter((asset) => asset.kind === 'terms').length ? '当前语言对已启用本地导入术语库，内置示例术语不会混入。' : '当前使用内置示例术语；可从左侧术语库入口导入正式资产。'}</div>
                   </div>
                 )}
               </div>

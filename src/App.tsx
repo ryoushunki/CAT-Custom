@@ -20,13 +20,14 @@ import {
   Search,
   Settings,
   Sparkles,
+  Trash2,
   Upload,
 } from 'lucide-react'
 import { initialSegmentsByFile, projectFiles } from './data'
 import { buildTranslatedExport } from './fileExport'
 import { seedTerms, seedTranslationMemory, similarityScore } from './languageAssets'
-import { loadFileRecord, loadFileRecords, saveFileRecord } from './storage'
-import type { ImportSettings, ProjectFile, Segment, SegmentStatus, TranslationMemoryEntry } from './types'
+import { deleteAssetRecord, loadAssetRecords, loadFileRecord, loadFileRecords, saveAssetRecord, saveFileRecord } from './storage'
+import type { AssetKind, AssetRecord, ImportSettings, ProjectFile, Segment, SegmentStatus, TermEntry, TranslationMemoryEntry } from './types'
 
 type FilterType = 'all' | SegmentStatus
 type InspectorTab = 'suggestions' | 'ai' | 'terms'
@@ -47,6 +48,20 @@ interface ImportDraft {
   sourceLanguage: string
   targetLanguage: string
   nonTranslatablePattern: string
+}
+
+interface AssetImportDraft {
+  file: File
+  kind: AssetKind
+  assetName: string
+  sheets: ParsedSheet[]
+  sheetName: string
+  sourceColumn: number
+  targetColumn: number | null
+  startRow: number
+  sourceLanguage: string
+  targetLanguage: string
+  status: TermEntry['status']
 }
 
 const DEFAULT_NON_TRANSLATABLE_PATTERN = '<[^>]+>|%(?:s|d)|\\\\n|\\{[^{}]+\\}'
@@ -332,6 +347,204 @@ function ImportDialog({
   )
 }
 
+function assetKindLabel(kind: AssetKind) {
+  return kind === 'memory' ? '翻译记忆库' : '术语库'
+}
+
+function assetEntriesFromRows(rows: unknown[][], draft: AssetImportDraft) {
+  const normalizedRows = normalizeRows(rows)
+  return normalizedRows
+    .map((row, rowIndex) => ({ row, rowIndex }))
+    .filter(({ rowIndex }) => rowIndex >= draft.startRow - 1)
+    .map(({ row }) => ({
+      source: row[draft.sourceColumn]?.trim() ?? '',
+      target: draft.targetColumn == null ? '' : row[draft.targetColumn]?.trim() ?? '',
+    }))
+    .filter((entry) => entry.source && entry.target)
+}
+
+function AssetImportDialog({
+  draft,
+  onChange,
+  onCancel,
+  onConfirm,
+}: {
+  draft: AssetImportDraft
+  onChange: (next: AssetImportDraft) => void
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const selectedSheet = draft.sheets.find((sheet) => sheet.sheet === draft.sheetName) ?? draft.sheets[0]
+  const maxColumns = Math.max(1, ...selectedSheet.data.slice(0, 30).map((row) => row.length))
+  const columns = Array.from({ length: maxColumns }, (_, index) => index)
+  const previewRows = normalizeRows(selectedSheet.data).slice(0, 8)
+  const entries = assetEntriesFromRows(selectedSheet.data, draft)
+  const update = (changes: Partial<AssetImportDraft>) => onChange({ ...draft, ...changes })
+
+  return (
+    <div className="modal-backdrop">
+      <section className="import-dialog asset-import-dialog" role="dialog" aria-modal="true" aria-label={`${assetKindLabel(draft.kind)}导入设置`}>
+        <header className="import-dialog-header">
+          <div>
+            <span className="eyebrow">导入{assetKindLabel(draft.kind)}</span>
+            <h2>{draft.assetName}</h2>
+          </div>
+          <button className="dialog-close" onClick={onCancel} aria-label="关闭资产导入设置">×</button>
+        </header>
+
+        <div className="import-dialog-body">
+          <div className="import-settings-grid">
+            <label>
+              <span>资产名称</span>
+              <input value={draft.assetName} onChange={(event) => update({ assetName: event.target.value })} />
+            </label>
+            <label>
+              <span>工作表</span>
+              <select value={draft.sheetName} onChange={(event) => update({ sheetName: event.target.value })}>
+                {draft.sheets.map((sheet) => <option key={sheet.sheet} value={sheet.sheet}>{sheet.sheet}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>从第几行开始</span>
+              <input
+                type="number"
+                min={1}
+                max={Math.max(1, selectedSheet.data.length)}
+                value={draft.startRow}
+                onChange={(event) => update({ startRow: Math.max(1, Number(event.target.value) || 1) })}
+              />
+            </label>
+            <label>
+              <span>原文列</span>
+              <select value={draft.sourceColumn} onChange={(event) => update({ sourceColumn: Number(event.target.value) })}>
+                {columns.map((column) => <option key={column} value={column}>{columnName(column)} 列</option>)}
+              </select>
+            </label>
+            <label>
+              <span>译文列</span>
+              <select value={draft.targetColumn ?? ''} onChange={(event) => update({ targetColumn: event.target.value === '' ? null : Number(event.target.value) })}>
+                <option value="">没有译文列</option>
+                {columns.map((column) => <option key={column} value={column}>{columnName(column)} 列</option>)}
+              </select>
+            </label>
+            <label>
+              <span>{draft.kind === 'terms' ? '资产状态' : '记录类型'}</span>
+              {draft.kind === 'terms' ? (
+                <select value={draft.status} onChange={(event) => update({ status: event.target.value as TermEntry['status'] })}>
+                  <option value="approved">导入为已批准</option>
+                  <option value="draft">导入为草稿</option>
+                </select>
+              ) : <input value="原文 — 译文" readOnly />}
+            </label>
+            <label>
+              <span>原文语言</span>
+              <select value={draft.sourceLanguage} onChange={(event) => update({ sourceLanguage: event.target.value })}>
+                {languageOptions.map((language) => <option key={language}>{language}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>目标语言</span>
+              <select value={draft.targetLanguage} onChange={(event) => update({ targetLanguage: event.target.value })}>
+                {languageOptions.map((language) => <option key={language}>{language}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="asset-import-hint">
+            <Cloud size={15} />
+            <span>{assetKindLabel(draft.kind)}会保存在本机，并参与当前语言对的匹配。重复的原文/术语会在导入时自动合并。</span>
+          </div>
+
+          <div className="import-preview-heading">
+            <strong>数据预览</strong>
+            <span>将导入 {entries.length} 条资产</span>
+          </div>
+          <div className="import-preview-scroll">
+            <table className="import-preview-table asset-preview-table">
+              <thead><tr><th>#</th><th>原文</th><th>译文</th></tr></thead>
+              <tbody>
+                {previewRows.map((row, rowIndex) => (
+                  <tr key={rowIndex} className={rowIndex + 1 < draft.startRow ? 'skipped-row' : ''}>
+                    <th>{rowIndex + 1}</th>
+                    <td className={draft.sourceColumn === 0 ? 'source-column' : ''}>{row[draft.sourceColumn] ?? ''}</td>
+                    <td className={draft.targetColumn === 1 ? 'target-column' : ''}>{draft.targetColumn == null ? '' : row[draft.targetColumn] ?? ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <footer className="import-dialog-footer">
+          <div><i className="source-key" />原文列 <i className="target-key" />译文列</div>
+          <button className="secondary-button" onClick={onCancel}>取消</button>
+          <button
+            className="primary-button"
+            onClick={onConfirm}
+            disabled={!draft.assetName.trim() || !entries.length || draft.targetColumn == null || draft.sourceColumn === draft.targetColumn}
+          >
+            导入 {entries.length} 条资产
+          </button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
+function AssetManagerDialog({
+  kind,
+  assets,
+  onClose,
+  onImport,
+  onDelete,
+}: {
+  kind: AssetKind
+  assets: AssetRecord[]
+  onClose: () => void
+  onImport: () => void
+  onDelete: (asset: AssetRecord) => void
+}) {
+  const currentAssets = assets.filter((asset) => asset.kind === kind)
+  const totalEntries = currentAssets.reduce((total, asset) => total + asset.entryCount, 0)
+
+  return (
+    <div className="modal-backdrop">
+      <section className="asset-manager-dialog" role="dialog" aria-modal="true" aria-label={assetKindLabel(kind)}>
+        <header className="import-dialog-header">
+          <div>
+            <span className="eyebrow">本地翻译资产</span>
+            <h2>{assetKindLabel(kind)}</h2>
+          </div>
+          <button className="dialog-close" onClick={onClose} aria-label="关闭资产管理">×</button>
+        </header>
+        <div className="asset-manager-body">
+          <div className="asset-manager-summary">
+            <div><strong>{currentAssets.length}</strong><span>个资产文件</span></div>
+            <div><strong>{totalEntries}</strong><span>条可用记录</span></div>
+            <button className="primary-button" onClick={onImport}><Upload size={15} />导入文件</button>
+          </div>
+          {currentAssets.length ? currentAssets.map((asset) => (
+            <div className="asset-file-card" key={asset.id}>
+              <div className={`asset-file-icon ${kind}`}>{kind === 'memory' ? <Cloud size={17} /> : <BookOpen size={17} />}</div>
+              <div className="asset-file-info">
+                <strong>{asset.name}</strong>
+                <span>{asset.entryCount} 条记录 · {asset.sourceLanguage} → {asset.targetLanguage} · {asset.updatedAt}</span>
+              </div>
+              <button className="asset-delete-button" onClick={() => onDelete(asset)} title="移除资产" aria-label={`移除${asset.name}`}><Trash2 size={15} /></button>
+            </div>
+          )) : (
+            <div className="asset-manager-empty">{kind === 'memory' ? <Cloud size={26} /> : <BookOpen size={26} />}<strong>还没有导入{assetKindLabel(kind)}</strong><span>导入 Excel、CSV 或 TSV 后，当前原文会实时获得资产匹配。</span></div>
+          )}
+        </div>
+        <footer className="asset-manager-footer">
+          <span>资产只保存在本机，不会自动上传到外部服务。</span>
+          <button className="secondary-button" onClick={onClose}>完成</button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
 function App() {
   const [files, setFiles] = useState<ProjectFile[]>(projectFiles)
   const [segmentsByFile, setSegmentsByFile] = useState<Record<string, Segment[]>>(cloneInitialSegments)
@@ -346,9 +559,14 @@ function App() {
   const [isImporting, setImporting] = useState(false)
   const [isExporting, setExporting] = useState(false)
   const [importDraft, setImportDraft] = useState<ImportDraft | null>(null)
+  const [assets, setAssets] = useState<AssetRecord[]>([])
+  const [activeAssetKind, setActiveAssetKind] = useState<AssetKind | null>(null)
+  const [assetDraft, setAssetDraft] = useState<AssetImportDraft | null>(null)
+  const [isAssetImporting, setAssetImporting] = useState(false)
   const saveTimer = useRef<number | null>(null)
   const noticeTimer = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const assetFileInputRef = useRef<HTMLInputElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const activeFile = files.find((file) => file.id === activeFileId) ?? files[0]
@@ -361,6 +579,7 @@ function App() {
   }
 
   useEffect(() => {
+    void loadAssetRecords().then(setAssets).catch(() => showNotice('本地资产加载失败，请重新启动应用。'))
     void loadFileRecords().then(async (records) => {
       if (records.length) {
         const migratedRecords = records.map((record) => {
@@ -441,8 +660,15 @@ function App() {
           segmentId: segment.id,
         }))
     })
-    return [...liveEntries, ...seedTranslationMemory]
-  }, [files, segmentsByFile])
+    const importedEntries = assets
+      .filter((asset) => asset.kind === 'memory' && asset.sourceLanguage === activeFile?.sourceLanguage && asset.targetLanguage === activeFile?.targetLanguage)
+      .flatMap((asset) => (asset.entries as TranslationMemoryEntry[]).map((entry, index) => ({
+        ...entry,
+        id: `asset-${asset.id}-${index}`,
+        project: entry.project || asset.name,
+      })))
+    return [...importedEntries, ...liveEntries, ...seedTranslationMemory]
+  }, [activeFile?.sourceLanguage, activeFile?.targetLanguage, assets, files, segmentsByFile])
 
   const memoryMatches = useMemo(() => {
     if (!activeSegment) return []
@@ -460,8 +686,17 @@ function App() {
 
   const termMatches = useMemo(() => {
     if (!activeSegment) return []
-    return seedTerms.filter((term) => activeSegment.source.includes(term.source))
-  }, [activeSegment])
+    const importedTerms = assets
+      .filter((asset) => asset.kind === 'terms' && asset.sourceLanguage === activeFile?.sourceLanguage && asset.targetLanguage === activeFile?.targetLanguage)
+      .flatMap((asset) => asset.entries as TermEntry[])
+    const deduplicated = new Map<string, TermEntry>()
+    for (const term of [...importedTerms, ...seedTerms]) {
+      if (!activeSegment.source.includes(term.source)) continue
+      const key = `${term.source}\u0000${term.target}`
+      if (!deduplicated.has(key)) deduplicated.set(key, term)
+    }
+    return [...deduplicated.values()].sort((left, right) => right.source.length - left.source.length)
+  }, [activeFile?.sourceLanguage, activeFile?.targetLanguage, activeSegment, assets])
 
   const activeMissingElements = activeSegment ? getMissingProtectedElements(activeSegment) : []
 
@@ -610,6 +845,114 @@ function App() {
     showNotice(`已导入 ${importedSegments.length} 个句段。`)
   }
 
+  const openAssetManager = (kind: AssetKind) => {
+    setActiveAssetKind(kind)
+    setAssetDraft(null)
+  }
+
+  const handleAssetImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0]
+    event.target.value = ''
+    if (!selectedFile || !activeAssetKind) return
+
+    setAssetImporting(true)
+    try {
+      const lowerName = selectedFile.name.toLowerCase()
+      let sheets: ParsedSheet[]
+      if (lowerName.endsWith('.xlsx')) {
+        sheets = (await readXlsxFile(selectedFile)).map((sheet) => ({ sheet: sheet.sheet, data: sheet.data }))
+      } else if (lowerName.endsWith('.csv') || lowerName.endsWith('.tsv')) {
+        const text = await selectedFile.text()
+        sheets = [{
+          sheet: lowerName.endsWith('.tsv') ? 'TSV' : 'CSV',
+          data: parseCsv(text, lowerName.endsWith('.tsv') ? '\t' : ','),
+        }]
+      } else {
+        throw new Error('unsupported')
+      }
+      if (!sheets.length || !sheets[0].data.length) throw new Error('empty')
+
+      const firstSheet = sheets[0]
+      const basename = selectedFile.name.replace(/\.[^.]+$/, '')
+      setAssetDraft({
+        file: selectedFile,
+        kind: activeAssetKind,
+        assetName: basename,
+        sheets,
+        sheetName: firstSheet.sheet,
+        sourceColumn: 0,
+        targetColumn: 1,
+        startRow: looksLikeHeader(firstSheet.data) ? 2 : 1,
+        sourceLanguage: activeFile?.sourceLanguage ?? '简体中文',
+        targetLanguage: activeFile?.targetLanguage ?? '越南语',
+        status: 'approved',
+      })
+    } catch (error) {
+      showNotice(error instanceof Error && error.message === 'unsupported'
+        ? '资产文件支持 XLSX、CSV 和 TSV。'
+        : '没有读取到有效资产表，请检查文件内容。')
+    } finally {
+      setAssetImporting(false)
+    }
+  }
+
+  const confirmAssetImport = async () => {
+    if (!assetDraft || assetDraft.targetColumn == null) return
+    const selectedSheet = assetDraft.sheets.find((sheet) => sheet.sheet === assetDraft.sheetName) ?? assetDraft.sheets[0]
+    const sourceRows = assetEntriesFromRows(selectedSheet.data, assetDraft)
+    const uniqueEntries = new Map<string, { source: string; target: string }>()
+    for (const entry of sourceRows) uniqueEntries.set(`${entry.source}\u0000${entry.target}`, entry)
+    const entries = [...uniqueEntries.values()]
+    if (!entries.length) {
+      showNotice('当前设置没有读取到有效的原文/译文对应关系。')
+      return
+    }
+
+    const assetId = `asset-${Date.now()}`
+    const assetEntries = assetDraft.kind === 'memory'
+      ? entries.map((entry, index): TranslationMemoryEntry => ({
+          id: `${assetId}-${index}`,
+          source: entry.source,
+          target: entry.target,
+          project: assetDraft.assetName,
+        }))
+      : entries.map((entry): TermEntry => ({
+          source: entry.source,
+          target: entry.target,
+          status: assetDraft.status,
+        }))
+    const asset: AssetRecord = {
+      id: assetId,
+      kind: assetDraft.kind,
+      name: assetDraft.assetName.trim(),
+      sourceLanguage: assetDraft.sourceLanguage,
+      targetLanguage: assetDraft.targetLanguage,
+      updatedAt: '刚刚',
+      entryCount: assetEntries.length,
+      entries: assetEntries,
+    }
+
+    try {
+      await saveAssetRecord(asset)
+      setAssets((current) => [asset, ...current])
+      setAssetDraft(null)
+      showNotice(`已导入 ${asset.entryCount} 条${assetKindLabel(asset.kind)}记录。`)
+    } catch {
+      showNotice('资产保存失败，请稍后重试。')
+    }
+  }
+
+  const removeAsset = async (asset: AssetRecord) => {
+    if (!window.confirm(`确定移除“${asset.name}”吗？这不会删除原始文件。`)) return
+    try {
+      await deleteAssetRecord(asset.id)
+      setAssets((current) => current.filter((candidate) => candidate.id !== asset.id))
+      showNotice(`已移除${assetKindLabel(asset.kind)}“${asset.name}”。`)
+    } catch {
+      showNotice('移除资产失败，请稍后重试。')
+    }
+  }
+
   const exportActiveFile = async () => {
     if (!activeFile?.importSettings) {
       showNotice('示例文件没有原始文件，请先导入真实翻译文件。')
@@ -703,6 +1046,13 @@ function App() {
         accept=".xlsx,.csv,.tsv"
         onChange={handleFileImport}
       />
+      <input
+        ref={assetFileInputRef}
+        className="hidden-file-input"
+        type="file"
+        accept=".xlsx,.csv,.tsv"
+        onChange={handleAssetImport}
+      />
       {importDraft && (
         <ImportDialog
           draft={importDraft}
@@ -711,15 +1061,32 @@ function App() {
           onConfirm={() => void confirmFileImport()}
         />
       )}
+      {activeAssetKind && !assetDraft && (
+        <AssetManagerDialog
+          kind={activeAssetKind}
+          assets={assets}
+          onClose={() => setActiveAssetKind(null)}
+          onImport={() => assetFileInputRef.current?.click()}
+          onDelete={(asset) => void removeAsset(asset)}
+        />
+      )}
+      {assetDraft && (
+        <AssetImportDialog
+          draft={assetDraft}
+          onChange={setAssetDraft}
+          onCancel={() => setAssetDraft(null)}
+          onConfirm={() => void confirmAssetImport()}
+        />
+      )}
 
       <aside className="app-rail">
         <div className="brand-mark" aria-label="LingoForge">
           <Languages size={22} strokeWidth={2.2} />
         </div>
         <nav className="rail-nav">
-          <button className="rail-button active" title="项目"><FolderKanban size={20} /></button>
-          <button className="rail-button upcoming" title="翻译记忆库将在下一阶段开放" disabled><Cloud size={20} /></button>
-          <button className="rail-button upcoming" title="术语库将在下一阶段开放" disabled><BookOpen size={20} /></button>
+          <button className={`rail-button ${!activeAssetKind ? 'active' : ''}`} title="项目" onClick={() => setActiveAssetKind(null)}><FolderKanban size={20} /></button>
+          <button className={`rail-button ${activeAssetKind === 'memory' ? 'active' : ''}`} title="翻译记忆库" onClick={() => openAssetManager('memory')}><Cloud size={20} /></button>
+          <button className={`rail-button ${activeAssetKind === 'terms' ? 'active' : ''}`} title="术语库" onClick={() => openAssetManager('terms')}><BookOpen size={20} /></button>
           <button className="rail-button upcoming" title="质量检查将在下一阶段开放" disabled><AlertCircle size={20} /></button>
         </nav>
         <div className="rail-bottom">
@@ -980,7 +1347,7 @@ function App() {
                         <strong>{term.source}</strong><span>{term.target}</span><i>{term.status === 'approved' ? '已批准' : '草稿'}</i>
                       </div>
                     )) : <div className="asset-empty"><BookOpen size={19} /><span>当前原文没有命中术语</span></div>}
-                    <div className="feature-hint">当前使用内置术语数据；下一步接入正式术语库导入和编辑。</div>
+                    <div className="feature-hint">{assets.filter((asset) => asset.kind === 'terms').length ? '当前已叠加本地导入术语库与内置示例术语。' : '当前使用内置示例术语；可从左侧术语库入口导入正式资产。'}</div>
                   </div>
                 )}
               </div>

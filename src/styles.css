@@ -122,6 +122,32 @@ button { color: inherit; }
 .source-key { background: #8a7ce8; }
 .target-key { margin-left: 8px; background: #4cab83; }
 .import-dialog-footer .primary-button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.asset-import-dialog { width: min(760px, calc(100vw - 56px)); }
+.asset-import-hint { margin-top: 15px; padding: 9px 10px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid #e2ddff; border-radius: 8px; color: #7168b4; background: #f7f5ff; font-size: 8px; line-height: 1.55; }
+.asset-import-hint svg { flex: none; margin-top: 1px; }
+.asset-preview-table th, .asset-preview-table td { min-width: 220px; max-width: 390px; }
+.asset-preview-table th:first-child { min-width: 42px; width: 42px; }
+.asset-manager-dialog { width: min(700px, calc(100vw - 56px)); max-height: calc(100vh - 56px); display: grid; grid-template-rows: 70px minmax(0, 1fr) 62px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .7); border-radius: 16px; background: #fff; box-shadow: 0 28px 80px rgba(15, 18, 27, .3); }
+.asset-manager-body { min-height: 0; overflow: auto; padding: 19px 22px 22px; background: #fbfbfc; }
+.asset-manager-summary { margin-bottom: 15px; padding: 12px 13px; display: flex; align-items: center; gap: 18px; border: 1px solid #e4e6eb; border-radius: 11px; background: #fff; }
+.asset-manager-summary > div { min-width: 72px; display: flex; flex-direction: column; gap: 2px; }
+.asset-manager-summary strong { color: #3c4050; font-size: 18px; line-height: 1; }
+.asset-manager-summary span { color: #9297a2; font-size: 8px; }
+.asset-manager-summary .primary-button { margin-left: auto; height: 32px; font-size: 9px; }
+.asset-file-card { min-height: 58px; margin-bottom: 7px; padding: 10px 11px; display: flex; align-items: center; gap: 10px; border: 1px solid #e4e6eb; border-radius: 10px; background: #fff; }
+.asset-file-icon { width: 33px; height: 33px; display: grid; place-items: center; flex: none; border-radius: 8px; color: #5b4fd0; background: #eeebff; }
+.asset-file-icon.terms { color: #27835b; background: #e9f6ef; }
+.asset-file-info { min-width: 0; flex: 1; }
+.asset-file-info strong { display: block; overflow: hidden; color: #363a45; font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+.asset-file-info span { display: block; margin-top: 3px; color: #979ca7; font-size: 8px; }
+.asset-delete-button { width: 29px; height: 29px; border: 0; border-radius: 7px; display: grid; place-items: center; color: #a4a8b1; background: transparent; cursor: pointer; }
+.asset-delete-button:hover { color: #bd4f5b; background: #fff0f1; }
+.asset-manager-empty { min-height: 190px; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px dashed #dfe1e7; border-radius: 11px; color: #9ba0aa; background: rgba(255, 255, 255, .68); text-align: center; }
+.asset-manager-empty svg { color: #aaa4d7; }
+.asset-manager-empty strong { color: #5f6470; font-size: 11px; }
+.asset-manager-empty span { max-width: 320px; font-size: 8px; line-height: 1.6; }
+.asset-manager-footer { padding: 0 20px; display: flex; align-items: center; justify-content: flex-end; gap: 9px; border-top: 1px solid var(--line); background: white; }
+.asset-manager-footer > span { margin-right: auto; color: #858b96; font-size: 8px; }
 
 .drag-region { -webkit-app-region: drag; }
 .no-drag, button, input, textarea { -webkit-app-region: no-drag; }

@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb'
-import type { ProjectFile, Segment } from './types'
+import type { AssetRecord, ProjectFile, Segment } from './types'
 
 interface StoredFileRecord {
   id: string
@@ -8,17 +8,26 @@ interface StoredFileRecord {
   originalFile?: ArrayBuffer
 }
 
+interface StoredAssetRecord extends AssetRecord {}
+
 interface CatDatabase extends DBSchema {
   files: {
     key: string
     value: StoredFileRecord
   }
+  assets: {
+    key: string
+    value: StoredAssetRecord
+  }
 }
 
-const databasePromise = openDB<CatDatabase>('lingoforge-cat', 1, {
+const databasePromise = openDB<CatDatabase>('lingoforge-cat', 2, {
   upgrade(database) {
     if (!database.objectStoreNames.contains('files')) {
       database.createObjectStore('files', { keyPath: 'id' })
+    }
+    if (!database.objectStoreNames.contains('assets')) {
+      database.createObjectStore('assets', { keyPath: 'id' })
     }
   },
 })
@@ -42,4 +51,19 @@ export async function saveFileRecord(file: ProjectFile, segments: Segment[], ori
     segments,
     originalFile: originalFile ?? existing?.originalFile,
   })
+}
+
+export async function loadAssetRecords() {
+  const database = await databasePromise
+  return database.getAll('assets')
+}
+
+export async function saveAssetRecord(asset: AssetRecord) {
+  const database = await databasePromise
+  await database.put('assets', asset)
+}
+
+export async function deleteAssetRecord(id: string) {
+  const database = await databasePromise
+  await database.delete('assets', id)
 }

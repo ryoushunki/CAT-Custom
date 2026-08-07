@@ -46,3 +46,16 @@ export interface TermEntry {
   target: string
   status: 'approved' | 'draft'
 }
+
+export type AssetKind = 'memory' | 'terms'
+
+export interface AssetRecord {
+  id: string
+  kind: AssetKind
+  name: string
+  sourceLanguage: string
+  targetLanguage: string
+  updatedAt: string
+  entryCount: number
+  entries: TranslationMemoryEntry[] | TermEntry[]
+}

@@ -24,12 +24,24 @@ export interface ImportSettings {
 export interface ProjectFile {
   id: string
   name: string
+  projectId?: string
   sourceLanguage: string
   targetLanguage: string
   progress: number
   segmentCount: number
   updatedAt: string
   importSettings?: ImportSettings
+}
+
+export interface Project {
+  id: string
+  name: string
+  sourceLanguage: string
+  targetLanguage: string
+  memoryAssetIds: string[]
+  termAssetIds: string[]
+  createdAt: string
+  updatedAt: string
 }
 
 export interface TranslationMemoryEntry {
@@ -53,6 +65,7 @@ export interface AssetRecord {
   id: string
   kind: AssetKind
   name: string
+  category: string
   sourceLanguage: string
   targetLanguage: string
   updatedAt: string

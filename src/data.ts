@@ -1,9 +1,12 @@
 import type { ProjectFile, Segment } from './types'
 
+export const DEFAULT_PROJECT_ID = 'demo-project'
+
 export const projectFiles: ProjectFile[] = [
   {
     id: 'main-story',
     name: '主线剧情.xlsx',
+    projectId: DEFAULT_PROJECT_ID,
     sourceLanguage: '简体中文',
     targetLanguage: '越南语',
     progress: 68,
@@ -13,6 +16,7 @@ export const projectFiles: ProjectFile[] = [
   {
     id: 'items',
     name: '道具与装备.xlsx',
+    projectId: DEFAULT_PROJECT_ID,
     sourceLanguage: '简体中文',
     targetLanguage: '越南语',
     progress: 42,
@@ -22,6 +26,7 @@ export const projectFiles: ProjectFile[] = [
   {
     id: 'events',
     name: '活动文案_7月.xlsx',
+    projectId: DEFAULT_PROJECT_ID,
     sourceLanguage: '简体中文',
     targetLanguage: '越南语',
     progress: 91,

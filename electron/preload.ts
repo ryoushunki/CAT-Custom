@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('catApp', {
   platform: process.platform,
-  version: '0.5.0',
+  version: '0.6.0',
   saveExportedFile: (payload: {
     defaultName: string
     data: Uint8Array

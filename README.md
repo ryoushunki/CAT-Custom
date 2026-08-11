@@ -1,57 +1,32 @@
 # LingoForge CAT
 
-面向游戏本地化的本地优先桌面 CAT 工具。
+面向游戏本地化的本地优先 CAT 工具 · A local-first CAT tool for game localization.
 
-## 本地开发
+[简体中文](README.zh-CN.md) · [English](README.en.md) · [更新日志 / Changelog](CHANGELOG.md)
+
+## 当前版本 / Current version
+
+`v0.6.0`
+
+本仓库仅包含应用源代码和通用测试文件，不包含个人或公司的 Excel、CSV、翻译记忆库、术语库、客户文本或本地 IndexedDB 数据。/ This repository contains source code and generic test fixtures only. It does not include personal or company translation files, customer strings, translation memories, termbases, or local IndexedDB data.
+
+## 快速开始 / Quick start
 
 ```powershell
 npm.cmd install
 npm.cmd run dev
 ```
 
-## 构建
+构建 / Build:
 
 ```powershell
 npm.cmd run build
 ```
 
-## 当前能力
+Windows 安装包 / Windows installer:
 
-- 现代化三栏翻译工作区
-- 原文/译文双栏句段编辑
-- 翻译状态、进度和匹配率展示
-- 原文与译文搜索
-- 未翻译、待检查、已翻译筛选
-- 译文自动保存
-- 三个示例文件可真实切换并分别保存
-- XLSX、CSV、TSV 两列文件导入
-- 句段状态点击切换
-- 根据当前原文实时检索翻译记忆
-- 根据当前原文实时命中术语
-- 翻译记忆建议一键采用
-- 建议、AI、术语面板页签切换
-- 编辑译文后自动进入待检查状态
-- Ctrl+Enter 或确认按钮完成句段确认
-- 正式导入向导：工作表、原文列、译文列、起始行和语言选择
-- 非译元素正则设置与导入预览统计
-- 非译元素缺失 QA 与确认阻止
-- 保存原文件、原始行号和导入映射
-- XLSX 原格式回写导出：只修改目标工作表的对应译文单元格
-- CSV、TSV 按原始行列回写导出
-- 导入时没有目标列，可在导出时自动追加目标语言列
-- 系统“另存为”选择导出路径
-- 翻译记忆库与术语库资产管理入口
-- XLSX、CSV、TSV 资产导入向导
-- 资产自定义名称、分类、本地持久化、移除和语言对隔离
-- 本地项目创建、切换和项目级 TM/术语库绑定
-- 导入资产参与右侧翻译记忆和术语实时匹配
-- 非译元素在原文和译文编辑区以独立标签 token 展示
-- 缺失、多出、顺序变化的非译元素 QA，以及快速插入缺失标签
-- 空项目状态与“导入当前文件”流程
-- 未实现功能明确禁用并显示说明
-- 自定义标题栏窗口拖动
-- 翻译记忆和术语建议面板原型
+```powershell
+npm.cmd run dist
+```
 
-当前版本使用 IndexedDB 保存项目、项目文件、句段、导入配置、原文件和翻译资产，数据仅保存在本机。导出按钮明确回写当前文件；导入不会直接落库，而是先进入工作表、列映射、起始行和非译元素正则配置向导。
-
-下一阶段将补充资产编辑、TMX 导入导出、更完整的标签保护和数字/标点 QA。
+详细说明请查看上面的中英文 README。/ See the language-specific README files above for details.

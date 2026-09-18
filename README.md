@@ -6,9 +6,11 @@
 
 ## 当前版本 / Current version
 
-`v0.6.0`
+`v0.7.0`
 
 本仓库仅包含应用源代码和通用测试文件，不包含个人或公司的 Excel、CSV、翻译记忆库、术语库、客户文本或本地 IndexedDB 数据。/ This repository contains source code and generic test fixtures only. It does not include personal or company translation files, customer strings, translation memories, termbases, or local IndexedDB data.
+
+项目背景与后续 AI 开发方向请查看 [Open-source development context](docs/OSS_CONTEXT.md)；快速复现主流程请查看 [Reproduce the core workflow](docs/REPRODUCE.md)。
 
 ## 快速开始 / Quick start
 

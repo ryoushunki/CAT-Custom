@@ -4,11 +4,15 @@
 
 [English README](README.en.md) · [更新日志](CHANGELOG.md) · [GitHub Releases](https://github.com/ryoushunki/CAT-Custom/releases)
 
+许可证：MIT · [贡献指南](CONTRIBUTING.md) · [5 分钟复现流程](docs/REPRODUCE.md) · [开源开发背景](docs/OSS_CONTEXT.md)
+
 ## 项目定位
 
 LingoForge CAT 用于减少在云文档、AI 工具和本地文件之间反复复制粘贴的操作，帮助翻译人员保持术语、标签和格式的一致性。
 
 它不是面向多人账号、任务分配或供应商管理的系统，而是一个本地优先的单人 CAT 工作台原型，后续可以交给技术团队继续扩展。
+
+项目当前优先保证本地翻译工作流可用；AI 接口仍处于下一阶段，不会把尚未实现的能力描述为已完成。后续计划采用可配置、供应商无关的 OpenAI-compatible 接口，并保留本地数据优先和用户主动配置才上传的边界。
 
 ## 当前能力
 
@@ -57,7 +61,7 @@ npm.cmd run dist
 
 ## 版本与 Release
 
-当前版本为 `v0.6.0`，版本号与 `package.json` 保持一致。
+当前版本为 `v0.7.0`，版本号与 `package.json` 保持一致。
 
 - `v0.x.y`：开发验证阶段；
 - 第三个数字递增：问题修复和小幅改动，例如 `v0.6.1`；

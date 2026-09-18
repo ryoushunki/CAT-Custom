@@ -4,11 +4,15 @@ A local-first desktop CAT tool for game localization. It focuses on individual t
 
 [简体中文 README](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [GitHub Releases](https://github.com/ryoushunki/CAT-Custom/releases)
 
+License: MIT · [Contributing](CONTRIBUTING.md) · [5-minute reproduction](docs/REPRODUCE.md) · [Open-source context](docs/OSS_CONTEXT.md)
+
 ## Project focus
 
 LingoForge CAT reduces repetitive copying between cloud documents, AI tools, and local files. It helps translators keep terminology, tags, and formatting consistent.
 
 It is not an account, task-assignment, or vendor-management platform. It is a local-first single-user CAT workspace prototype that can later be extended by a technical team.
+
+The current release prioritizes a dependable local workflow. AI provider integration is intentionally a next-stage feature, so the documentation does not claim that an unimplemented capability is already shipped. The planned design is an opt-in, provider-agnostic OpenAI-compatible layer with local data as the default.
 
 ## Current capabilities
 
@@ -57,7 +61,7 @@ The repository ignores local build outputs and common translation-file formats. 
 
 ## Versions and releases
 
-The current version is `v0.6.0`, kept in sync with `package.json`.
+The current version is `v0.7.0`, kept in sync with `package.json`.
 
 - `v0.x.y`: development and validation stage;
 - Increment the patch number for fixes, such as `v0.6.1`;

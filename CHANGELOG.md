@@ -1,5 +1,23 @@
 # 更新日志 / Changelog
 
+## v0.7.0 — 2026-09-18
+
+### 简体中文
+
+- 补充 MIT 开源许可证和贡献指南；
+- 新增无需私有数据即可复现核心流程的 5 分钟验证文档；
+- 新增开源项目背景与后续 AI provider 设计说明；
+- 明确当前版本的本地优先边界，以及 AI 接口仍处于下一阶段；
+- README 增加许可证、复现入口和项目背景链接。
+
+### English
+
+- Added the MIT license and contribution guide;
+- Added a five-minute reproduction checklist using only public fixtures;
+- Added open-source context and the planned AI provider design;
+- Clarified the local-first boundary and that AI integration remains a future stage;
+- Added license, reproduction, and project-context links to the README files.
+
 ## v0.6.0 — 2026-08-07
 
 ### 简体中文
